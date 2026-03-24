@@ -25,9 +25,13 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Analyze log files using LLM (Python 3.14+)")
     parser.add_argument("log_file", help="Path to the log file to analyze")
     parser.add_argument("--model", default=os.getenv("DEFAULT_MODEL", "llama3:8b"), 
-                        help="Ollama model to use")
+                        help="Ollama model to use for analysis/generation")
+    parser.add_argument("--embed-model", default=os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b"), 
+                        help="Ollama model to use for text embeddings")
     parser.add_argument("--output", default="analysis_output.txt", 
                         help="Output file name")
+    parser.add_argument("--force-reindex", action="store_true",
+                        help="Force re-indexing of the log file even if embeddings already exist")
     return parser.parse_args()
 
 def load_log_file(log_path):
@@ -37,37 +41,58 @@ def load_log_file(log_path):
     with open(log_path, 'r', encoding='utf-8') as file:
         return file.read()
 
-def get_retriever(log_content, model_name):
-    """Create a vector store and return a retriever"""
+def get_retriever(log_path, embed_model_name, force_reindex=False):
+    """Create or load a persistent vector store and return a retriever"""
     ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     
-    # Split the log content into manageable chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    chunks = text_splitter.split_text(log_content)
+    # Create a unique directory name for this log file's embeddings
+    log_filename = Path(log_path).name
+    persist_dir = os.path.join(".chroma_db", log_filename)
     
-    # Initialize embeddings with the base_url from .env
+    # Initialize embeddings model
     embeddings = OllamaEmbeddings(
-        model=model_name,
+        model=embed_model_name,
         base_url=ollama_base_url
     )
     
-    # Create an in-memory Chroma vector store
-    vector_store = Chroma.from_texts(
-        chunks, 
-        embeddings, 
-        metadatas=[{"source": "log_input"} for _ in chunks]
-    )
-    
+    # Check if we already have a database for this log file
+    if os.path.exists(persist_dir) and not force_reindex:
+        logger.info(f"Loading existing embeddings from {persist_dir} (Skipping text processing)")
+        vector_store = Chroma(
+            persist_directory=persist_dir, 
+            embedding_function=embeddings
+        )
+    else:
+        logger.info(f"Generating new embeddings for {log_path}...")
+        log_content = load_log_file(log_path)
+        
+        # Split the log content into manageable chunks
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+        chunks = text_splitter.split_text(log_content)
+        
+        if not chunks:
+            raise ValueError("The provided log file is empty or contains no readable text.")
+        
+        # Create and persist the Chroma vector store
+        vector_store = Chroma.from_texts(
+            chunks, 
+            embeddings, 
+            metadatas=[{"source": log_path} for _ in chunks],
+            persist_directory=persist_dir
+        )
+        logger.info(f"Embeddings successfully saved to {persist_dir}")
+        
     return vector_store.as_retriever(search_kwargs={"k": 5})
 
-def analyze_log(log_content, model_name):
+def analyze_log(log_path, model_name, embed_model_name, force_reindex):
     """Analyze the log using the modern Retrieval Chain (LCEL)"""
     ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     
-    # Use the modern OllamaLLM class (compatible with Pydantic v2/Python 3.14)
+    # Use the modern OllamaLLM class for generation
     llm = OllamaLLM(model=model_name, base_url=ollama_base_url)
     
-    retriever = get_retriever(log_content, model_name)
+    # Pass the path instead of content so the retriever can decide whether to read the file
+    retriever = get_retriever(log_path, embed_model_name, force_reindex)
 
     # Define a modern ChatPromptTemplate
     system_prompt = (
@@ -82,13 +107,13 @@ def analyze_log(log_content, model_name):
         ("human", "{input}"),
     ])
 
-    # Build the modern chain (LCEL)
+    # Build the modern chain (LCEL) using langchain_classic
     combine_docs_chain = create_stuff_documents_chain(llm, prompt)
     rag_chain = create_retrieval_chain(retriever, combine_docs_chain)
 
     # Execute analysis
     try:
-        logger.info(f"Invoking RAG chain with model: {model_name}")
+        logger.info(f"Invoking RAG chain with generation model: {model_name}")
         response = rag_chain.invoke({"input": "Perform a comprehensive analysis of these logs. Identify any errors, security anomalies, or performance bottlenecks."})
         return response["answer"]
     except Exception as e:
@@ -98,9 +123,9 @@ def analyze_log(log_content, model_name):
 def main():
     try:
         args = parse_arguments()
-        log_content = load_log_file(args.log_file)
         
-        analysis_result = analyze_log(log_content, args.model)
+        # We now pass the file path, not the loaded content
+        analysis_result = analyze_log(args.log_file, args.model, args.embed_model, args.force_reindex)
         
         with open(args.output, 'w', encoding='utf-8') as output_file:
             output_file.write(analysis_result)

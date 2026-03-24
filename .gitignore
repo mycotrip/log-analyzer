@@ -38,3 +38,6 @@ __pycache__/
 *.log
 lib64
 etc/jupyter/nbconfig/notebook.d/pydeck.json
+# --- Vector Databases ---
+# Ignore persisted ChromaDB embeddings
+.chroma_db/
