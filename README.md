@@ -1,4 +1,3 @@
-```markdown
 # Log Analyzer - LLM-Powered Log File Analysis Tool
 
 A command-line tool that analyzes log files using LLMs (Large Language Models) for identifying errors, anomalies, and other issues in system logs.
