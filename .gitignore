@@ -1,0 +1,40 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# --- Python Virtual Environment ---
+# Since your directory IS the virtual env, ignore common venv folders
+bin/
+include/
+lib/
+lib64/
+share/
+pyvenv.cfg
+.venv/
+env/
+venv/
+
+# --- Environment & Secrets ---
+# Ignore the actual local environment file containing keys
+.env
+.env.local
+.env.shared-spec
+
+# --- Python Cache & Build ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+
+# --- OS & IDE Specific ---
+.DS_Store
+.vscode/
+.idea/
+.continue/
+*.swp
+
+
+# --- Logs ---
+# Since this is a "log-analyzer", ignore any local logs generated during testing
+*.log
+lib64
+etc/jupyter/nbconfig/notebook.d/pydeck.json
