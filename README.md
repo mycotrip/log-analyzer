@@ -18,6 +18,13 @@ This tool leverages the power of modern LLMs (specifically Ollama models) to ana
 - Supports both CLI and script-based usage
 - Option to force re-indexing of log files (even if embeddings already exist)
 - Separation of analysis model and embedding model for fine-tuned performance
+- Support for environment variables to configure model and service settings
+- Built-in validation for required environment variables
+- Clear documentation for all command-line arguments and options
+- Automatic text chunking and splitting using LangChain text splitters
+- Vector database integration using Chroma for efficient retrieval
+- Dynamic retrieval system that adapts to log content and structure
+- Support for multiple log file formats through flexible parsing
 
 ## Requirements
 
@@ -32,9 +39,18 @@ This tool leverages the power of modern LLMs (specifically Ollama models) to ana
 
 ### Dependencies
 ```
-langchain-community
-langchain-ollama
-python-dotenv
+# --- Core Framework (Python 3.14+ Compatible) ---
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.2.0
+
+# --- Vector Database & Processing ---
+langchain-chroma>=0.1.0
+langchain-text-splitters>=0.3.0
+
+# --- Environment & Utilities ---
+python-dotenv>=1.0.1
 ````
 
 ## Installation
@@ -42,7 +58,7 @@ python-dotenv
 1. Ensure you have Python 3.14+ installed
 2. Install required dependencies:
    ```bash
-   pip install langchain-community langchain-ollama python-dotenv
+   pip install langchain-community langchain-ollama langchain-chroma langchain-text-splitters python-dotenv
    ```
 
 3. Install Ollama (if not already installed):
@@ -59,27 +75,27 @@ python-dotenv
 ### Basic Usage
 ```bash
 python log-analyzer.py path/to/your/logfile.log
-```
+````
 
 ### With Custom Analysis Model
 ```bash
 python log-analyzer.py path/to/your/logfile.log --model llama3:7b
-```
+````
 
 ### With Custom Embedding Model
 ```bash
 python log-analyzer.py path/to/your/logfile.log --embed-model qwen3-embedding:4b
-```
+````
 
 ### With Custom Output File
 ```bash
 python log-analyzer.py path/to/your/logfile.log --output analysis_results.txt
-```
+````
 
 ### With Force Reindex Option
 ```bash
 python log-analyzer.py path/to/your/logfile.log --force-reindex
-```
+````
 
 ### With Environment Variables
 Set environment variables in a `.env` file:
@@ -87,15 +103,15 @@ Set environment variables in a `.env` file:
 DEFAULT_MODEL=llama3:8b
 EMBEDDING_MODEL=qwen3-embedding:4b
 OLLAMA_BASE_URL=http://localhost:11434
-```
+````
 
 ## How It Works
 
 1. The tool reads the specified log file
-2. Splits the log content into manageable chunks for processing
-3. Creates a vector store using ChromaDB to store the log content
+2. Uses LangChain text splitters to divide the log content into manageable chunks for processing
+3. Creates a vector store using ChromaDB to store the log content for efficient retrieval
 4. Uses the specified Ollama model for analysis and a separate model for embeddings
-5. Identifies errors, warnings, anomalies, and other issues
+5. Performs retrieval-based analysis to identify errors, warnings, anomalies, and other issues
 6. Returns a comprehensive analysis in a structured format
 
 ## Output
@@ -116,6 +132,42 @@ The tool supports several environment variables:
 - `DEFAULT_MODEL`: Default Ollama model to use for analysis (default: `llama3:8b`)
 - `EMBEDDING_MODEL`: Default Ollama model to use for text embeddings (default: `qwen3-embedding:4b`)
 - `OLLAMA_BASE_URL`: Base URL for Ollama service (default: `http://localhost:11434`)
+- `FORCE_REINDEX`: Set to true to force re-indexing of log files even if embeddings already exist (default: false)
+
+## Configuration Options
+
+### Model Selection
+- **Analysis Model**: Controls the model used for generating the final analysis output (default: `llama3:8b`)
+- **Embedding Model**: Controls the model used for text vectorization and retrieval (default: `qwen3-embedding:4b`)
+
+### Processing Options
+- **Force Reindex**: When set to true, forces the tool to re-process the entire log file even if previous embeddings exist. This is useful when you want to apply new analysis rules or update configurations.
+
+## Best Practices
+
+1. **Use different models for different tasks**: Pair a powerful language model (like llama3:8b) with a specialized embedding model (like qwen3-embedding:4b) for optimal performance.
+2. **Regularly update models**: As new models become available, consider updating your configuration to leverage improved performance or accuracy.
+3. **Monitor performance**: Use the force reindex option to test new configurations before deploying them in production.
+4. **Secure your environment**: Store sensitive model configurations in environment files rather than hardcoding them in scripts.
+5. **Optimize chunk size**: Adjust text splitting parameters to balance between retrieval accuracy and processing efficiency.
+
+## Technical Architecture
+
+The tool follows a modular architecture with clear separation of concerns:
+
+1. **Input Processing**: The `load_log_file()` function reads and validates the log file
+2. **Text Splitting**: LangChain text splitters divide the log content into manageable chunks
+3. **Vector Storage**: ChromaDB stores the text chunks as vectors for efficient retrieval
+4. **Retrieval System**: The `get_retriever()` function creates a retriever that can search for relevant log content
+5. **Analysis Pipeline**: The analysis model processes the retrieved content to identify issues
+6. **Output Generation**: Results are formatted and saved to a file
+
+## Known Limitations
+
+- The tool currently only supports text-based log files
+- Performance may degrade with very large log files (over 100MB)
+- Some log formats may require additional parsing rules
+- Model selection is limited to available Ollama models
 
 ## License
 
