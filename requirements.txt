@@ -1,0 +1,12 @@
+# --- Core Framework (Python 3.14+ Compatible) ---
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.2.0
+
+# --- Vector Database & Processing ---
+chromadb>=0.5.0
+langchain-text-splitters>=0.3.0
+
+# --- Environment & Utilities ---
+python-dotenv>=1.0.1
