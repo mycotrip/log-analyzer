@@ -2,12 +2,16 @@ import argparse
 import os
 import sys
 import logging
+import warnings
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Suppress annoying Pydantic V1 compatibility warnings for Python 3.14
+warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core")
+
 # Modern 2026 LangChain Imports
 from langchain_ollama import OllamaLLM, OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma  # <-- Updated to the new dedicated package
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains import create_retrieval_chain
@@ -75,8 +79,8 @@ def get_retriever(log_path, embed_model_name, force_reindex=False):
         
         # Create and persist the Chroma vector store
         vector_store = Chroma.from_texts(
-            chunks, 
-            embeddings, 
+            texts=chunks, 
+            embedding=embeddings, 
             metadatas=[{"source": log_path} for _ in chunks],
             persist_directory=persist_dir
         )
