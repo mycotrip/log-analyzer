@@ -1,3 +1,4 @@
+```markdown
 # Log Analyzer - LLM-Powered Log File Analysis Tool
 
 A command-line tool that analyzes log files using LLMs (Large Language Models) for identifying errors, anomalies, and other issues in system logs.
@@ -38,23 +39,6 @@ This tool leverages the power of modern LLMs (specifically Ollama models) to ana
 - At least one Ollama model available for analysis (e.g., llama3:8b)
 - At least one Ollama model available for embeddings (e.g., qwen3-embedding:4b)
 
-### Dependencies
-```
-# --- Core Framework (Python 3.14+ Compatible) ---
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-community>=0.3.0
-langchain-ollama>=0.2.0
-
-# --- Vector Database & Processing ---
-langchain-chroma>=0.1.0
-langchain-text-splitters>=0.3.0
-
-# --- Environment & Utilities ---
-python-dotenv>=1.0.1
-requests>=2.31.0
-```
-
 ## Installation
 
 1. Ensure you have Python 3.14+ installed
@@ -77,40 +61,28 @@ requests>=2.31.0
 ### Basic Usage
 ```bash
 python log-analyzer.py path/to/your/logfile.log
-```
+``` 
 
 ### With Custom Analysis Model
 ```bash
 python log-analyzer.py path/to/your/logfile.log --model llama3:7b
-```
+``` 
 
 ### With Custom Embedding Model
 ```bash
 python log-analyzer.py path/to/your/logfile.log --embed-model qwen3-embedding:4b
-```
+``` 
 
 ### With Custom Output File
 ```bash
 python log-analyzer.py path/to/your/logfile.log --output analysis_results.txt
-```
+``` 
 
 ### With Force Reindex Option
 ```bash
 python log-analyzer.py path/to/your/logfile.log --force-reindex
-```
-
-### With Environment Variables
-Set environment variables in a `.env` file:
-```
-DEFAULT_MODEL=llama3:8b
-EMBEDDING_MODEL=qwen3-embedding:4b
-OLLAMA_BASE_URL=http://localhost:11434
-ENABLE_GOTIFY_NOTIFICATIONS=true
-GOTIFY_SERVER_URL=http://your-gotify-server:8080
-GOTIFY_TOKEN=your-gotify-token
-GOTIFY_TOPIC=logs
-```
-
+``` 
+ 
 ## How It Works
 
 1. The tool reads the specified log file
@@ -158,17 +130,6 @@ The tool supports several environment variables:
 - **Enable Notifications**: Set `ENABLE_GOTIFY_NOTIFICATIONS=true` to enable notifications
 - **Server URL**: Configure the Gotify server address
 - **Authentication**: Provide a valid token for authentication
-- **Topic**: Specify a topic for notifications (e.g., "logs", "security", "monitoring")
-
-## Best Practices
-
-1. **Use different models for different tasks**: Pair a powerful language model (like llama3:8b) with a specialized embedding model (like qwen3-embedding:4b) for optimal performance.
-2. **Regularly update models**: As new models become available, consider updating your configuration to leverage improved performance or accuracy.
-3. **Monitor performance**: Use the force reindex option to test new configurations before deploying them in production.
-4. **Secure your environment**: Store sensitive model configurations in environment files rather than hardcoding them in scripts.
-5. **Optimize chunk size**: Adjust text splitting parameters to balance between retrieval accuracy and processing efficiency.
-6. **Use Gotify notifications wisely**: Only enable when necessary to avoid notification overload. Use specific topics for different types of alerts (e.g., security vs. system monitoring).
-7. **Set appropriate thresholds**: Only send notifications for critical issues to avoid noise.
 
 ## Technical Architecture
 
@@ -213,95 +174,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
-
----
-
-### 3. Python Code Changes for Gotify Notifications
-
-You'll need to add the following code to your main analysis script (e.g., `log-analyzer.py`):
-
-```python
-import os
-import requests
-from dotenv import load_dotenv
-from langchain_community.vectorstores import Chroma
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.retrievers import ContextualCompressionRetriever
-from langchain_community.retrievers import BaseRetriever
-from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
-from langchain_community.llms import Ollama
-from langchain_community.embeddings import OllamaEmbeddings
-import logging
-
-# Load environment variables
-load_dotenv()
-
-# Gotify notification function
-def send_gotify_notification(file_path: str, status: str, summary: str):
-    """
-    Sends a notification to Gotify server with file analysis results
-    
-    Args:
-        file_path: Path to the analyzed log file
-        status: Success or failure status
-        summary: Brief summary of critical issues (100 words or less)
-    """
-    # Get environment variables
-    gotify_server_url = os.getenv("GOTIFY_SERVER_URL", "http://localhost:8080")
-    gotify_token = os.getenv("GOTIFY_TOKEN")
-    gotify_topic = os.getenv("GOTIFY_TOPIC", "logs")
-    
-    # Validate required fields
-    if not gotify_token:
-        logging.warning("Gotify token not configured. Notification will not be sent.")
-        return
-    
-    if not gotify_server_url:
-        logging.warning("Gotify server URL not configured. Notification will not be sent.")
-        return
-    
-    # Prepare notification payload
-    payload = {
-        "title": f"Log Analysis - {os.path.basename(file_path)}",
-        "message": f"Status: {status}\nFile: {file_path}\nSummary: {summary}",
-        "topic": gotify_topic
-    }
-    
-    # Send notification via POST request
-    try:
-        response = requests.post(
-            f"{gotify_server_url}/api/v1/pushmsg",
-            json=payload,
-            headers={
-                "X-Gotify-Token": gotify_token,
-                "Content-Type": "application/json"
-            },
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            logging.info(f"Successfully sent Gotify notification for {file_path}")
-        else:
-            logging.error(f"Failed to send Gotify notification: {response.status_code} - {response.text}")
-            
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Request error when sending Gotify notification: {str(e)}")
-
-# Add to your main analysis flow
-def analyze_log_file(log_file_path: str, model: str = None, embed_model: str = None, output_file: str = None):
-    # ... your existing analysis code ...
-    
-    # After analysis completes, send notification
-    if "ENABLE_GOTIFY_NOTIFICATIONS" in os.environ and os.getenv("ENABLE_GOTIFY_NOTIFICATIONS", "false").lower() == "true":
-        # Extract critical issues summary from analysis
-        critical_summary = extract_critical_summary(analysis_result)
-        
-        # Send notification
-        send_gotify_notification(
-            file_path=log_file_path,
-            status="success" if analysis_result.get("success", True) else "failed",
-            summary=critical_summary
-        )
