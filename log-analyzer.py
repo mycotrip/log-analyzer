@@ -135,9 +135,9 @@ def send_gotify_notification(file_path: str, status: str, summary: str):
         summary: Brief summary of critical issues (100 words or less)
     """
     # Get environment variables
-    gotify_server_url = os.getenv("GOTIFY_SERVER_URL", "http://localhost:8080")
+    # We use .rstrip('/') to prevent double-slashes if your .env URL has a trailing slash
+    gotify_server_url = os.getenv("GOTIFY_SERVER_URL", "http://localhost:8080").rstrip('/')
     gotify_token = os.getenv("GOTIFY_TOKEN")
-    gotify_topic = os.getenv("GOTIFY_TOPIC", "logs")
     
     # Validate required fields
     if not gotify_token:
@@ -149,19 +149,20 @@ def send_gotify_notification(file_path: str, status: str, summary: str):
         return
     
     # Prepare notification payload
+    # Gotify expects 'message', 'title', and an optional 'priority'
     payload = {
         "title": f"Log Analysis - {os.path.basename(file_path)}",
         "message": f"Status: {status}\nFile: {file_path}\nSummary: {summary}",
-        "topic": gotify_topic
+        "priority": 5
     }
     
     # Send notification via POST request
     try:
         response = requests.post(
-            f"{gotify_server_url}/api/v1/pushmsg",
+            f"{gotify_server_url}/message",  # Fixed API endpoint
             json=payload,
             headers={
-                "X-Gotify-Token": gotify_token,
+                "X-Gotify-Key": gotify_token,  # Fixed authentication header
                 "Content-Type": "application/json"
             },
             timeout=10
@@ -191,9 +192,10 @@ def main():
         
         # Send Gotify notification if enabled
         if "ENABLE_GOTIFY_NOTIFICATIONS" in os.environ and os.getenv("ENABLE_GOTIFY_NOTIFICATIONS", "false").lower() == "true":
+            # FIXED: Check if the string starts with 'Error:' instead of using .get()
             send_gotify_notification(
                 file_path=args.log_file,
-                status="success" if analysis_result.get("success", True) else "failed",
+                status="failed" if analysis_result.startswith("Error:") else "success",
                 summary=critical_summary
             )
         
