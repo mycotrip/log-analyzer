@@ -5,6 +5,7 @@ import logging
 import warnings
 from pathlib import Path
 from dotenv import load_dotenv
+import requests
 
 # Suppress annoying Pydantic V1 compatibility warnings for Python 3.14
 warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core")
@@ -124,6 +125,56 @@ def analyze_log(log_path, model_name, embed_model_name, force_reindex):
         logger.error(f"Analysis failed: {str(e)}")
         return f"Error: {str(e)}"
 
+def send_gotify_notification(file_path: str, status: str, summary: str):
+    """
+    Sends a notification to Gotify server with file analysis results
+    
+    Args:
+        file_path: Path to the analyzed log file
+        status: Success or failure status
+        summary: Brief summary of critical issues (100 words or less)
+    """
+    # Get environment variables
+    gotify_server_url = os.getenv("GOTIFY_SERVER_URL", "http://localhost:8080")
+    gotify_token = os.getenv("GOTIFY_TOKEN")
+    gotify_topic = os.getenv("GOTIFY_TOPIC", "logs")
+    
+    # Validate required fields
+    if not gotify_token:
+        logger.warning("Gotify token not configured. Notification will not be sent.")
+        return
+    
+    if not gotify_server_url:
+        logger.warning("Gotify server URL not configured. Notification will not be sent.")
+        return
+    
+    # Prepare notification payload
+    payload = {
+        "title": f"Log Analysis - {os.path.basename(file_path)}",
+        "message": f"Status: {status}\nFile: {file_path}\nSummary: {summary}",
+        "topic": gotify_topic
+    }
+    
+    # Send notification via POST request
+    try:
+        response = requests.post(
+            f"{gotify_server_url}/api/v1/pushmsg",
+            json=payload,
+            headers={
+                "X-Gotify-Token": gotify_token,
+                "Content-Type": "application/json"
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            logger.info(f"Successfully sent Gotify notification for {file_path}")
+        else:
+            logger.error(f"Failed to send Gotify notification: {response.status_code} - {response.text}")
+            
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error when sending Gotify notification: {str(e)}")
+
 def main():
     try:
         args = parse_arguments()
@@ -131,14 +182,56 @@ def main():
         # We now pass the file path, not the loaded content
         analysis_result = analyze_log(args.log_file, args.model, args.embed_model, args.force_reindex)
         
+        # Extract critical issues summary from analysis result
+        critical_summary = extract_critical_summary(analysis_result)
+        
+        # Save results to output file
         with open(args.output, 'w', encoding='utf-8') as output_file:
             output_file.write(analysis_result)
+        
+        # Send Gotify notification if enabled
+        if "ENABLE_GOTIFY_NOTIFICATIONS" in os.environ and os.getenv("ENABLE_GOTIFY_NOTIFICATIONS", "false").lower() == "true":
+            send_gotify_notification(
+                file_path=args.log_file,
+                status="success" if analysis_result.get("success", True) else "failed",
+                summary=critical_summary
+            )
         
         logger.info(f"Analysis complete. Results saved to {args.output}")
             
     except Exception as e:
         logger.error(f"Fatal Error: {str(e)}")
         sys.exit(1)
+
+def extract_critical_summary(analysis_result: str) -> str:
+    """
+    Extract a brief summary of critical issues from the analysis result
+    
+    Args:
+        analysis_result: Full analysis output from the log file
+        
+    Returns:
+        Brief summary of critical issues (under 100 words)
+    """
+    # Simple extraction - you can enhance this with NLP if needed
+    critical_keywords = ["error", "failed", "security", "anomaly", "malicious", "suspicious", "threat", "attack", "breach"]
+    summary = ""
+    
+    # Look for critical issues in the analysis
+    for keyword in critical_keywords:
+        if keyword in analysis_result.lower():
+            summary += f"Found {keyword} in log analysis\n"
+            break
+    
+    # Add a fallback if no critical issues found
+    if not summary:
+        summary = "No critical issues detected in the log analysis"
+    
+    # Ensure summary is under 100 characters
+    if len(summary) > 100:
+        summary = summary[:100] + "..."
+    
+    return summary.strip()
 
 if __name__ == "__main__":
     main()
