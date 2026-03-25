@@ -12,6 +12,8 @@ import requests
 from tqdm import tqdm
 import re
 from datetime import datetime, timedelta
+from concurrent.futures import ProcessPoolExecutor
+import math
 
 # Suppress annoying Pydantic V1 compatibility warnings for Python 3.14
 warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core")
@@ -85,9 +87,30 @@ def is_critical_log_line(line: str) -> bool:
         return False
     return any(re.search(pattern, line, re.IGNORECASE) for pattern in CRITICAL_LOG_PATTERNS)
 
-def filter_critical_logs(log_lines: list[str]) -> list[str]:
-    """Filter out non-critical log lines using regex patterns"""
-    return [line for line in log_lines if is_critical_log_line(line)]
+def filter_chunk(chunk: list[str]) -> list[str]:
+    """Helper function to filter a single chunk of lines"""
+    return [line for line in chunk if is_critical_log_line(line)]
+
+def filter_critical_logs(log_lines: list[str], num_workers: int = 4) -> list[str]:
+    """Filter log lines in parallel by splitting them into chunks"""
+    if not log_lines:
+        return []
+
+    # Calculate chunk size based on total lines and workers
+    chunk_size = math.ceil(len(log_lines) / num_workers)
+    chunks = [log_lines[i : i + chunk_size] for i in range(0, len(log_lines), chunk_size)]
+
+    critical_lines = []
+    
+    # Process chunks in parallel
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # map returns results in the same order as the chunks
+        results = executor.map(filter_chunk, chunks)
+        
+        for result in results:
+            critical_lines.extend(result)
+            
+    return critical_lines
 
 def read_log_file_stream(file_path: str) -> iter:
     """Stream log file line-by-line to avoid loading entire file into memory"""
@@ -133,8 +156,8 @@ def get_retriever(log_path: str, embed_model_name: str, force_reindex: bool = Fa
     if pbar: pbar.set_description("Reading log file (streaming)")
     log_lines = list(read_log_file_stream(log_path))
     
-    if pbar: pbar.set_description("Filtering critical log lines")
-    critical_lines = filter_critical_logs(log_lines)
+    if pbar: pbar.set_description("Filtering critical log lines (Parallel)")
+    critical_lines = filter_critical_logs(log_lines, num_workers=os.cpu_count() or 4)
     
     if not critical_lines:
         logger.warning("No critical log lines found. Skipping embedding generation.")
